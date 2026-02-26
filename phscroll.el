@@ -1268,7 +1268,7 @@ Like a recenter-top-bottom."
           (setcar iter (phscroll-ovc-create 'display pvalue ov))) ;;reuse a cons cell of overlays list
          ;; 'invisible
          ((and (setq pvalue (overlay-get ov 'invisible))
-               (not (eq pvalue 'outline))) ;;ignore outline invisible overlay
+               (not (memq pvalue '(outline org-fold-outline)))) ;;ignore outline invisible overlay
           (setcar iter (phscroll-ovc-create 'invisible pvalue ov))) ;;reuse a cons cell of overlays list
          ;; not supported type
          (t
