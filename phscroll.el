@@ -1447,7 +1447,10 @@ Like a recenter-top-bottom."
   ;; Temporarily unveil folded text
   (let ((overlays (cl-loop for ov in (overlays-in beg end)
                            for invis = (overlay-get ov 'invisible)
-                           when (or (eq invis 'outline) (assq 'outline invis))
+                           when (or (memq invis '(outline org-fold-outline))
+                                    (and (listp invis)
+                                         (assq 'outline invis)
+                                         (assq 'org-fold-outline invis)))
                            collect (progn
                                      (overlay-put ov 'invisible nil)
                                      (cons ov invis)))))
