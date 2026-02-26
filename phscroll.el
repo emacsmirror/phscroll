@@ -73,6 +73,53 @@ If it is nil, it is indicated by the < and > characters."
   :type 'boolean
   :group 'phscroll)
 
+;;;; Logging
+
+(eval-and-compile
+  (defcustom phscroll-log-generate nil
+    "Control log code generation at compile time."
+    :group 'phscroll :type '(choice boolean regexp)))
+
+(defcustom phscroll-log-output nil
+  "Control log message output at runtime."
+  :group 'phscroll :type '(choice boolean regexp))
+
+(defmacro phscroll-log (format-string &rest args)
+  "Log a message if enabled by `phscroll-log-generate' and
+`phscroll-log-output'."
+  (when (if (stringp phscroll-log-generate)
+            (string-match-p phscroll-log-generate format-string)
+          phscroll-log-generate)
+    `(when (if (stringp phscroll-log-output)
+               (string-match-p phscroll-log-output ,format-string)
+             phscroll-log-output)
+       (message ,(concat "Phscroll " format-string) ,@args))))
+
+(defun phscroll-log-watch (regexp)
+  "Enable log output for logs whose format-string matches REGEXP.
+
+The format-string is the first argument passed to the `phscroll-log' macro.
+
+If an empty string is specified, all log output is enabled.
+
+To output logs, `phscroll-log-generate' must be set to non-nil before
+loading the library."
+  (interactive
+   (list (read-regexp
+          "Regexp to match format-string of phscroll-log (empty for all)")))
+  (message "Log output enabled")
+  (setq phscroll-log-output
+        (if (and (stringp regexp) (not (string-empty-p regexp)))
+            regexp
+          t)))
+
+(defun phscroll-log-unwatch ()
+  "Disable log output."
+  (interactive)
+  (setq phscroll-log-output nil)
+  (message "Log output disabled"))
+
+
 ;;;; Basic Commands
 
 (defvar-local phscroll-truncate-lines nil) ;; to detect truncate-lines change
@@ -228,7 +275,7 @@ EVAPORATE is the same as the overlay property of the same name.
 
 INIT-SCROLL-COLUMN, INIT-UPDATED-RANGES, INIT-WINDOW-WIDTH are
 for special cases."
-  ;;(message "create %s %s" beg end)
+  (phscroll-log "Area: Create %s~%s" beg end)
   (let* ((ov (make-overlay beg end))
          (area (list
                 'phscroll ;;0
@@ -252,6 +299,7 @@ for special cases."
     (let ((beg (phscroll-area-begin area))
           (end (phscroll-area-end area))
           (ov (phscroll-area-overlay area)))
+      (phscroll-log "Area: Destroy %s~%s" beg end)
       (remove-overlays beg end 'phscroll-left t)
       (remove-overlays beg end 'phscroll-right t)
       (delete-overlay ov))))
@@ -270,6 +318,8 @@ Return AREA."
       ;; If area range changed
       (when (or (/= old-beg beg)
                 (/= old-end end))
+        (phscroll-log "Area: Move %s~%s update:%s (Old:%s~%s)"
+                      beg end update old-beg old-end)
         ;; Remove ranges outside the new area from updated ranges list
         ;; and remove left and right overlays
         (if (or (<= old-end beg) (<= end old-beg))
@@ -317,6 +367,8 @@ Return TO-AREA."
            (overlap-end (min to-end from-end))
            (new-beg (min to-beg from-beg))
            (new-end (max to-end from-end)))
+      (phscroll-log "Area: Merge %s~%s and %s~%s"
+                    to-beg to-end from-beg from-end)
 
       (if (/= (phscroll-area-get-window-width to-area)
               (phscroll-area-get-window-width from-area))
@@ -379,6 +431,7 @@ Return a new area that is the second half of the divided area."
            (area-beg (overlay-start area-ov))
            (area-end (overlay-end area-ov)))
       (when (and (< area-beg pos) (< pos area-end))
+        (phscroll-log "Area: Split %s~%s at %s" area-beg area-end pos)
 
         (let ((prev-r (phscroll-area-updated-ranges-head area))
               (rel-pos (- pos area-beg))
@@ -642,6 +695,7 @@ Like a recenter-top-bottom."
    (max (phscroll-window-end window))))
 
 (defun phscroll-update-areas-in-window (&optional redraw window)
+  ;; (phscroll-log "Update Areas In Window: %s %s" redraw window)
   (cl-loop for area in (phscroll-areas-in-window window)
            do (phscroll-update-area-display area redraw window)))
 
@@ -1017,7 +1071,6 @@ Like a recenter-top-bottom."
 
 (defun phscroll-update-area-display (area &optional redraw window)
   (when (and area (not phscroll-truncate-lines))
-    ;;(message "update-area-display %s redraw=%s window-width=%s" area redraw (window-width window))
     (if (or (phscroll-area-window-width-changed-p area window) ;;First, update area.window-width
             redraw)
         (phscroll-area-clear-updated-ranges area))
@@ -1040,7 +1093,10 @@ Like a recenter-top-bottom."
                                 (cdr phscroll-fontify-range)
                               (phscroll-window-end window)))))
 
-      ;;(message "update-area-display %s redraw=%s window-width=%s update-range=(%s %s)" area redraw (window-width window) update-begin update-end)
+      (phscroll-log "Update Area: %s~%s update-range=%s~%s window-width=%s redraw=%s"
+                    area-begin area-end
+                    update-begin update-end
+                    (window-width window) redraw)
 
       (when (and (< update-begin update-end)
                  (phscroll-area-needs-update-range update-begin update-end area))
@@ -1104,7 +1160,10 @@ Like a recenter-top-bottom."
          (middle-shortage (- middle-limit-width middle-width))
          (middle-len (phscroll-string-length middle-str)))
 
-    ;;(message "update-current-line-display point=%s window-width=%s" (point) window-width)
+    (phscroll-log "Update Line: %s~%s len:%s:%s width:%s:%s"
+                  line-begin line-end
+                  left-len middle-len
+                  left-width middle-width)
 
     (when (> scroll-column 0)
       (let ((ov (make-overlay line-begin (+ line-begin left-len))))
@@ -1334,6 +1393,7 @@ Like a recenter-top-bottom."
 
 (defun phscroll-truncate-string-to-width (str end-column &optional cache-arg)
   ;;ignore-overlay: (truncate-string-to-width str end-column)
+  (phscroll-log "truncate-string-to-width str=%s end-column=%s cache-arg=%s" str end-column cache-arg)
   (let* ((width 0)
          (prev-width 0)
          (beg (car str))
