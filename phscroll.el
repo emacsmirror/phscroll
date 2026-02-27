@@ -1268,7 +1268,7 @@ Like a recenter-top-bottom."
           (setcar iter (phscroll-ovc-create 'display pvalue ov))) ;;reuse a cons cell of overlays list
          ;; 'invisible
          ((and (setq pvalue (overlay-get ov 'invisible))
-               (not (memq pvalue '(outline org-fold-outline)))) ;;ignore outline invisible overlay
+               (not (phscroll-ignored-invisibility-spec-p pvalue))) ;;ignore outline invisible overlay
           (setcar iter (phscroll-ovc-create 'invisible pvalue ov))) ;;reuse a cons cell of overlays list
          ;; not supported type
          (t
@@ -1288,6 +1288,27 @@ Like a recenter-top-bottom."
   (when (and cache
              (<= (phscroll-ovc-beg (car cache)) pos)) ;; ovc.beg <= pos
     (car cache)))
+
+
+(defconst phscroll-ignored-invisibility-specs
+  ;; See:
+  ;; - `org-fold-initialize'
+  ;; - `org-string-width-invisibility-spec'
+  ;; - `outline-flag-region'
+  '(outline org-fold-drawer org-fold-block org-fold-outline)
+  "List of invisibility specs to ignore when calculating text width.
+
+Contents folded by outline-mode or org-mode are invisible, but their
+width must be calculated as if they were visible.")
+
+(defun phscroll-ignored-invisibility-spec-p (prop-value)
+  "Return non-nil if the invisible property value specified by PROP-VALUE
+should be ignored."
+  (or (memq prop-value phscroll-ignored-invisibility-specs)
+      ;; When PROP-VALUE has multiple specs.
+      (and (listp prop-value)
+           (seq-some (lambda (x) (memq x phscroll-ignored-invisibility-specs))
+                     prop-value))))
 
 ;; Character Width Calculation
 
@@ -1447,11 +1468,9 @@ Like a recenter-top-bottom."
   ;; Temporarily unveil folded text
   (let ((overlays (cl-loop for ov in (overlays-in beg end)
                            for invis = (overlay-get ov 'invisible)
-                           when (or (memq invis '(outline org-fold-outline))
-                                    (and (listp invis)
-                                         (assq 'outline invis)
-                                         (assq 'org-fold-outline invis)))
+                           when (phscroll-ignored-invisibility-spec-p invis)
                            collect (progn
+                                     ;; @todo (if (listp invis) (seq-difference invis phscroll-ignored-invisibility-specs) nil)?
                                      (overlay-put ov 'invisible nil)
                                      (cons ov invis)))))
     (unwind-protect
