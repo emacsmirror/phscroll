@@ -233,7 +233,7 @@ If NO-UPDATE is non-nil, this function will not call
   "Cover the region BEG..END with a single phscroll area."
   (interactive "r")
 
-  (if-let ((area (phscroll-merge-region beg end t)));;no-update=t
+  (if-let* ((area (phscroll-merge-region beg end t)));;no-update=t
       (let ((area-beg (phscroll-area-begin area))
             (area-end (phscroll-area-end area)))
         (when (or (< beg area-beg) (< area-end end))
