@@ -60,7 +60,7 @@ If it is nil, it is indicated by the < and > characters."
   (+ phscroll-margin-right-additional
      (if phscroll-use-fringe 1 2)))
 
-(defcustom phscroll-scroll-left-right-move-point t
+(defcustom phscroll-scroll-left-right-move-point nil
   "If non-nil, move point with left/right scroll commands."
   :type 'boolean
   :group 'phscroll)
