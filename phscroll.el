@@ -1169,7 +1169,7 @@ This is the implementation of `phscroll-mwheel-scroll-left' and
     (define-key map "\C-x<" #'phscroll-scroll-left)
     (define-key map "\C-x>" #'phscroll-scroll-right)
     (define-key map (kbd "C-S-l") #'phscroll-recenter-left-right)
-    (define-key map (kbd "C-l") #'phscroll-recenter-top-bottom)
+    ;; (define-key map (kbd "C-l") #'phscroll-recenter-top-bottom)
     ;; Shift + Mouse Wheel
     (define-key map [(shift wheel-up)] #'phscroll-mwheel-scroll-left)
     (define-key map [(shift wheel-down)] #'phscroll-mwheel-scroll-right)
