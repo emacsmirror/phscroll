@@ -1248,6 +1248,18 @@ This is the implementation of `phscroll-mwheel-scroll-left' and
              (line-number-display-width 'columns))))
       0))))
 
+(defun phscroll-spec-size (size-spec window default &rest props)
+  (pcase size-spec
+    ((and (pred integerp) n) n)
+    ('window-height
+     (* (window-height window 'ceiling) (or (plist-get props :wh) 1)))
+    (`(window-height . ,(and (pred numberp) n))
+     (ceiling (* (window-height window 'ceiling) n)))
+    ('window-width
+     (* (window-width window nil) (or (plist-get props :ww) 1)))
+    (`(window-width . ,(and (pred numberp) n))
+     (ceiling (* (window-width window nil) n)))
+    (_ default)))
 
 
 ;;;; Area Display
@@ -1272,18 +1284,23 @@ WINDOW is the window to display in; nil means the selected window."
            (area-end (phscroll-area-end area))
            ;; If in fontify, do not use window-begin and window-end.
            ;; area-begin, area-end are already windowed.
+           (extra-lines (phscroll-update-area-window-extra-lines window))
            (update-begin (max area-begin
                               (point-min) ;;narrowed
                               (if phscroll-fontify-range
                                   (phscroll-line-begin
                                    (car phscroll-fontify-range))
                                 (phscroll-line-begin
-                                 (phscroll-window-start window)))))
+                                 (phscroll-forward-line-position
+                                  (phscroll-window-start window)
+                                  (- extra-lines))))))
            (update-end (min area-end
                             (point-max) ;;narrowed
                             (if phscroll-fontify-range
                                 (cdr phscroll-fontify-range)
-                              (phscroll-window-end window)))))
+                              (phscroll-forward-line-position
+                               (phscroll-window-end window)
+                               extra-lines)))))
 
       ;; Skip folded region in outline-mode or org-mode
       ;; (windowの表示範囲内を更新するとき、折りたたまれて見えない所ま
@@ -1309,6 +1326,23 @@ WINDOW is the window to display in; nil means the selected window."
           ;; Mark [update-begin, actual-end) as updated
           (phscroll-area-add-updated-range update-begin actual-end area))))))
 
+(defcustom phscroll-update-area-window-extra-lines 'window-height
+  "Number of extra lines to update above and below the window's visible
+range when updating it.
+
+A smaller value increases the likelihood of horizontal position
+misalignment when scrolling with C-v/M-v."
+  :group 'phscroll
+  :type '(choice
+          (integer :tag "Lines")
+          (const :tag "Window Height" window-height)
+          (cons :tag "Window Height * n" (const window-height) number)))
+
+(defun phscroll-update-area-window-extra-lines (window)
+  "Return the number of extra lines to update above and below the
+window's visible range when updating it."
+  (phscroll-spec-size phscroll-update-area-window-extra-lines window 1 :wh 1))
+
 (defcustom phscroll-update-area-max-time 10.0
   "Maximum time (in seconds) for updating the display of phscroll areas.
 If a single display update takes this long or longer, the update is aborted."
@@ -1329,13 +1363,7 @@ value or more, the update is aborted."
   "Return the maximum number of lines for updating the display of phscroll
 areas.
 See: `phscroll-update-area-max-lines' variable."
-  (pcase phscroll-update-area-max-lines
-    ((and (pred integerp) n) n)
-    ('window-height
-     (* (window-height window 'ceiling) 4))
-    (`(window-height . ,(and (pred numberp) n))
-     (round (* (window-height window 'ceiling) n)))
-    (_ 1000)))
+  (phscroll-spec-size phscroll-update-area-max-lines window 1000 :wh 4))
 
 (defun phscroll-update-area-lines-display (area
                                            scroll-column
@@ -1572,6 +1600,12 @@ otherwise return the position for the line containing the current point."
     (if pos
         (save-excursion (goto-char pos) (line-end-position))
       (line-end-position))))
+
+(defun phscroll-forward-line-position (pos delta-lines)
+  (save-excursion
+    (goto-char pos)
+    (forward-line delta-lines)
+    (point)))
 
 ;;;;; Text Operation Like a String
 
