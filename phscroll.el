@@ -70,6 +70,15 @@ If it is nil, it is indicated by the < and > characters."
   :type 'boolean
   :group 'phscroll)
 
+(defcustom phscroll-scroll-left-right-columns '(window-width . 0.25)
+  "The scroll amount for the left and right scroll commands.
+
+Affects `phscroll-scroll-left' and `phscroll-scroll-right'."
+  :type '(choice
+          (integer :tag "Columns")
+          (cons :tag "Window Width * ratio" (const window-width) number)
+          (const :tag "Window Width - Margin" nil)))
+
 (defcustom phscroll-hscroll-step 4
   "The number of columns to try scrolling a phscroll area by when point
 moves out."
@@ -530,7 +539,12 @@ If AREA is nil, use the scroll area containing the current point."
 
 If ARG is nil, use the value returned by `phscroll-scroll-left-right-unit'.
 
-If AREA is nil, use the scroll area containing the current point."
+If AREA is nil, use the scroll area containing the current point.
+
+Related customization variables:
+`phscroll-scroll-left-right-reverse-direction'
+`phscroll-scroll-left-right-move-point'
+`phscroll-scroll-left-right-columns'"
   (interactive "P")
   (phscroll-scroll-left-right-internal
    (if arg (prefix-numeric-value arg) (phscroll-scroll-left-right-unit))
@@ -541,7 +555,12 @@ If AREA is nil, use the scroll area containing the current point."
 
 If ARG is nil, use the value returned by `phscroll-scroll-left-right-unit'.
 
-If AREA is nil, use the scroll area containing the current point."
+If AREA is nil, use the scroll area containing the current point.
+
+Related customization variables:
+`phscroll-scroll-left-right-reverse-direction'
+`phscroll-scroll-left-right-move-point'
+`phscroll-scroll-left-right-columns'"
   (interactive "P")
   (phscroll-scroll-left-right-internal
    (- (if arg (prefix-numeric-value arg) (phscroll-scroll-left-right-unit)))
@@ -550,12 +569,13 @@ If AREA is nil, use the scroll area containing the current point."
 (defun phscroll-scroll-left-right-unit ()
   "Return the default horizontal scroll amount.
 
-The amount is determined by taking into account the window width and the
-margin to preserve."
+The scroll amount can be customized with `phscroll-scroll-left-right-columns'."
   (max 1
-       (- (phscroll-window-width-at (point) nil)
-          (phscroll-margin-right)
-          4)))
+       (if phscroll-scroll-left-right-columns
+           (phscroll-spec-size phscroll-scroll-left-right-columns nil 10)
+         (- (phscroll-window-width-at (point) nil)
+            (phscroll-margin-right)
+            4))))
 
 (defun phscroll-scroll-left-right-internal (delta area)
   "Scroll AREA by DELTA columns.
