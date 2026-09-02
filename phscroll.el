@@ -70,6 +70,13 @@ If it is nil, it is indicated by the < and > characters."
   :type 'boolean
   :group 'phscroll)
 
+(defcustom phscroll-hscroll-step 4
+  "The number of columns to try scrolling a phscroll area by when point
+moves out."
+  :type '(choice (integer :tag "Columns")
+                 (const :tag "Use `hscroll-step'" nil))
+  :group 'phscroll)
+
 (defcustom phscroll-calculate-in-pixels nil
   "Experimental."
   :type 'boolean
@@ -616,9 +623,8 @@ is visible within the window."
       (let ((scroll-column (phscroll-get-scroll-column area))
             (pos-column (phscroll-column pos))
             (window-width (phscroll-window-width-at pos nil))
-            (step (if (= hscroll-step 0)
-                      (/ (1+ (phscroll-window-width-at pos nil)) 2)
-                    hscroll-step)))
+            (step (or (phscroll-hscroll-step)
+                      (/ (1+ (phscroll-window-width-at pos nil)) 2))))
         (cond
          ((< pos-column (+ scroll-column hscroll-margin))
           (phscroll-set-scroll-column
@@ -626,6 +632,12 @@ is visible within the window."
          ((> pos-column (+ scroll-column (- window-width hscroll-margin)))
           (phscroll-set-scroll-column
            (+ (- pos-column window-width) hscroll-margin step) area)))))))
+
+(defun phscroll-hscroll-step ()
+  (let ((step (or phscroll-hscroll-step hscroll-step)))
+    (and (integerp step)
+         (not (zerop step))
+         step)))
 
 (defun phscroll-recenter (&optional arg)
   "If there is a scroll area at the current point, horizontally scroll it
