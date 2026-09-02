@@ -1322,7 +1322,7 @@ value or more, the update is aborted."
   :group 'phscroll
   :type '(choice
           (integer :tag "Lines")
-          (const :tag "Window height * 2" window-height)
+          (const :tag "Window height * 4" window-height)
           (cons :tag "Window Height * n" (const window-height) number)))
 
 (defun phscroll-update-area-max-lines (window)
@@ -1332,9 +1332,9 @@ See: `phscroll-update-area-max-lines' variable."
   (pcase phscroll-update-area-max-lines
     ((and (pred integerp) n) n)
     ('window-height
-     (* (window-height window 'ceiling) 2))
-    (`(window-height . ,(and (pred integerp) n))
-     (* (window-height window 'ceiling) n))
+     (* (window-height window 'ceiling) 4))
+    (`(window-height . ,(and (pred numberp) n))
+     (round (* (window-height window 'ceiling) n)))
     (_ 1000)))
 
 (defun phscroll-update-area-lines-display (area
