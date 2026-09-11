@@ -153,6 +153,31 @@ loading the library."
 
 (defvar-local phscroll-truncate-lines nil) ;; to detect truncate-lines change
 
+(defvar phscroll-mode-map
+  (let ((map (make-sparse-keymap)))
+    (define-key map "\C-x<" #'phscroll-scroll-left*)
+    (define-key map "\C-x>" #'phscroll-scroll-right*)
+    (define-key map (kbd "C-S-l") #'phscroll-recenter-left-right*)
+    ;; (define-key map (kbd "C-l") #'phscroll-recenter-top-bottom*)
+    ;; Shift + Mouse Wheel
+    (define-key map [(shift wheel-up)] #'phscroll-mwheel-scroll-left*)
+    (define-key map [(shift wheel-down)] #'phscroll-mwheel-scroll-right*)
+    (when (boundp 'mouse-wheel-down-event)
+      (define-key map (vector (list 'shift mouse-wheel-down-event))
+                  #'phscroll-mwheel-scroll-left*))
+    (when (boundp 'mouse-wheel-up-event)
+      (define-key map (vector (list 'shift mouse-wheel-up-event))
+                  #'phscroll-mwheel-scroll-right*))
+    map)
+  "Keymap applied when `phscroll-mode' is enabled.
+
+Note that commands bound here can also be called when point is outside
+a scroll area.
+
+Commands whose names end in * call the command that would have been
+called if the minor mode were disabled, when the event occurred outside
+a scroll area.")
+
 (define-minor-mode phscroll-mode
   "Partial horizontal scroll mode.
 
@@ -743,6 +768,9 @@ with AREA.
 If AREA is nil, use the scroll area containing the current point."
   (nth 2 (or area (phscroll-get-current-area))))
 
+(defun phscroll-area-buffer (&optional area)
+  (overlay-buffer (phscroll-area-overlay area)))
+
 ;;;;; Area Range
 
 (defun phscroll-area-begin (&optional area)
@@ -763,6 +791,15 @@ If AREA is nil, use the scroll area containing the current point."
   "Return the scroll area object associated with the overlay object OV, or
 nil if none."
   (overlay-get ov 'phscroll-area))
+
+(defun phscroll-get-area-at-event (event)
+  (when-let* ((point (posn-point (event-start event)))
+              (window (posn-window (event-start event))))
+    (with-current-buffer (window-buffer window)
+      (phscroll-get-area-at point))))
+
+(defun phscroll-last-event-area ()
+  (phscroll-get-area-at-event last-command-event))
 
 (defun phscroll-get-area-at (pos)
   "Return the scroll area object at POS, or nil if none."
@@ -1197,25 +1234,159 @@ This is the implementation of `phscroll-mwheel-scroll-left' and
 ;;;;; Area Local Keymap
 
 (defvar phscroll-keymap
-  (let ((map (make-sparse-keymap)))
-    (define-key map "\C-x<" #'phscroll-scroll-left)
-    (define-key map "\C-x>" #'phscroll-scroll-right)
-    (define-key map (kbd "C-S-l") #'phscroll-recenter-left-right)
-    ;; (define-key map (kbd "C-l") #'phscroll-recenter-top-bottom)
-    ;; Shift + Mouse Wheel
-    (define-key map [(shift wheel-up)] #'phscroll-mwheel-scroll-left)
-    (define-key map [(shift wheel-down)] #'phscroll-mwheel-scroll-right)
-    (when (boundp 'mouse-wheel-down-event)
-      (define-key map (vector (list 'shift mouse-wheel-down-event))
-                  #'phscroll-mwheel-scroll-left))
-    (when (boundp 'mouse-wheel-up-event)
-      (define-key map (vector (list 'shift mouse-wheel-up-event))
-                  'phscroll-mwheel-scroll-right))
-    map))
+  nil
+  ;; (let ((map (make-sparse-keymap)))
+  ;;   (define-key map "\C-x<" #'phscroll-scroll-left)
+  ;;   (define-key map "\C-x>" #'phscroll-scroll-right)
+  ;;   (define-key map (kbd "C-S-l") #'phscroll-recenter-left-right)
+  ;;   ;; (define-key map (kbd "C-l") #'phscroll-recenter-top-bottom)
+  ;;   ;; Shift + Mouse Wheel
+  ;;   (define-key map [(shift wheel-up)] #'phscroll-mwheel-scroll-left)
+  ;;   (define-key map [(shift wheel-down)] #'phscroll-mwheel-scroll-right)
+  ;;   (when (boundp 'mouse-wheel-down-event)
+  ;;     (define-key map (vector (list 'shift mouse-wheel-down-event))
+  ;;                 #'phscroll-mwheel-scroll-left))
+  ;;   (when (boundp 'mouse-wheel-up-event)
+  ;;     (define-key map (vector (list 'shift mouse-wheel-up-event))
+  ;;                 'phscroll-mwheel-scroll-right))
+  ;;   map)
+  "The value set for the `keymap` property of an overlay that covers the
+entire scroll area.
+If a keymap is set here, the `keymap` text property is shadowed.
+Therefore, it is generally recommended to use `phscroll-mode-map'.")
 
 (defun phscroll-area-set-keymap (area)
   (when area
     (overlay-put (phscroll-area-overlay area) 'keymap phscroll-keymap)))
+
+
+;;;; Interactive Commands for `phscroll-mode'
+
+(defun phscroll-event-modifiers (event)
+  "An alternative to `event-modifiers' that returns the correct values.
+`event-modifiers' has an issue where it returns an incorrect list after
+`mwheel-scroll'."
+  ;; (In Emacs 31.1)
+  ;; (event-modifiers 'S-triple-wheel-up) returns (shift) after
+  ;; `mwheel-scroll' !!
+  ;; `mwheel-scroll' has a bug that corrupts the cache.
+  ;; There are two options:
+  ;; - Extract the modifiers from
+  ;;    (get 'S-triple-wheel-up 'event-symbol-element-mask).
+  ;; - Parse the symbol name string.
+
+  (if (or (listp event) (symbolp event))
+      (when-let* ((type (if (listp event) (car event) event)))
+        (let ((name (symbol-name type))
+              (pos 0)
+              (modifiers))
+          (while (progn
+                   (string-match
+                    "\\([ACHMSs]\\|drag\\|down\\|double\\|triple\\|up\\)-\\|"
+                    name pos)
+                   (match-beginning 1))
+            (setq pos (match-end 0))
+            (let* ((modstr (match-string 1 name))
+                   (mod (if (= (length modstr) 1)
+                            (alist-get (aref modstr 0)
+                                       '((?A . alt) (?C . control)
+                                         (?H . hyper) (?M . meta)
+                                         (?S . shift) (?s . super)))
+                          (intern modstr))))
+              (unless (memq mod modifiers)
+                (push mod modifiers))))
+          modifiers))
+    (event-modifiers event)))
+;; TEST: (phscroll-event-modifiers 'S-triple-wheel-up)
+
+(defun phscroll-key-binding (keys)
+  "An alternative to the `key-binding' function that also matches keys
+without modifiers such as `double-' or `triple-'."
+  (or (key-binding keys)
+      ;; Look for other matching key sequences.
+      ;; (info "(elisp) Repeat Events")
+      ;; (info "(elisp) Classifying Events")
+      (let ((last-index (1- (length keys))))
+        ;; (message "Not match %s" keys)
+        (when (>= last-index 0)
+          (let* ((last-event (aref keys last-index))
+                 (modifiers (remove 'click
+                                    (phscroll-event-modifiers last-event)))
+                 (basic-type (event-basic-type last-event))
+                 (cmd nil))
+            ;; (message "modifiers=%s basic-type=%s" modifiers basic-type)
+            (when (consp last-event)
+              ;; See read_key_sequence in keyboard.c
+              ;; TODO: Support up/down modifiers
+              (while (and (null cmd)
+                          (seq-some
+                           (lambda (mod) (memq mod '(drag double triple)))
+                           modifiers))
+                (cond
+                 ((memq 'triple modifiers)
+                  (setq modifiers (cons 'double (delq 'triple modifiers))))
+                 ((memq 'double modifiers)
+                  (setq modifiers (delq 'double modifiers)))
+                 ((memq 'drag modifiers)
+                  (setq modifiers (delq 'drag modifiers))))
+                (let* ((new-type (event-convert-list
+                                  (append modifiers (list basic-type))))
+                       (new-event (cons new-type (cdr last-event)))
+                       (new-keys (copy-sequence keys)))
+                  (aset new-keys last-index new-event)
+                  ;; (message "Try %s" new-keys)
+                  (setq cmd (key-binding new-keys))))
+              cmd))))))
+
+(defun phscroll-call-default-command ()
+  "run the command that would have been called if the `phscroll-mode' were
+disabled."
+  (let ((cmd (let ((phscroll-mode nil))
+               (phscroll-key-binding (this-command-keys-vector)))))
+    (when (and cmd (not (eq cmd this-command)))
+      (setq this-command cmd)
+      (call-interactively cmd))))
+
+(defmacro phscroll-define-minor-mode-command (command
+                                              arglist
+                                              &optional interactive-form)
+  "Define a command that executes COMMAND when called within a scroll area,
+and otherwise invokes the command that would be called when
+`phscroll-mode' is disabled.
+
+The name of the defined command is COMMAND followed by an asterisk (*)."
+  (let ((new-command (intern (concat (symbol-name command) "*")))
+        (argvars (seq-remove (lambda (var) (eq (aref (symbol-name var) 0) ?&))
+                             arglist))
+        (doc
+         (string-fill
+          (format "If `last-command-event' occurred within a scroll area, run
+`%s'. Otherwise, run the command that would have been called if the
+minor mode were disabled."
+                  command)
+          76))
+        (interactive-form (or interactive-form (interactive-form command))))
+    `(progn
+       (defun ,new-command ,arglist
+         ,doc
+         ,interactive-form
+         (let ((area ,(if (memq 'area argvars)
+                          `(or area (phscroll-last-event-area))
+                        `(phscroll-last-event-area))))
+           (if area
+               (with-current-buffer (phscroll-area-buffer area)
+                 (,command ,@argvars))
+             (phscroll-call-default-command))))
+       (push ',new-command phscroll-interactive-scroll-commands))))
+
+;; Note: Use this macro after defining the target function
+;;       (otherwise, interactive-form cannot be retrieved)
+(phscroll-define-minor-mode-command phscroll-scroll-left (&optional arg area))
+(phscroll-define-minor-mode-command phscroll-scroll-right (&optional arg area))
+(phscroll-define-minor-mode-command phscroll-recenter-left-right (&optional arg))
+(phscroll-define-minor-mode-command phscroll-recenter-top-bottom (&optional arg))
+(phscroll-define-minor-mode-command phscroll-mwheel-scroll-left (event))
+(phscroll-define-minor-mode-command phscroll-mwheel-scroll-right (event))
 
 
 
