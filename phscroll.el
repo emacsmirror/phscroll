@@ -1359,12 +1359,12 @@ The name of the defined command is COMMAND followed by an asterisk (*)."
         (argvars (seq-remove (lambda (var) (eq (aref (symbol-name var) 0) ?&))
                              arglist))
         (doc
-         (string-fill
-          (format "If `last-command-event' occurred within a scroll area, run
-`%s'. Otherwise, run the command that would have been called if the
-minor mode were disabled."
-                  command)
-          76))
+         (format
+          "If `last-command-event' occurred within a scroll area, run
+`%s'.
+Otherwise, run the command that would have been called if the minor mode
+were disabled."
+          command))
         (interactive-form (or interactive-form (interactive-form command))))
     `(progn
        (defun ,new-command ,arglist
